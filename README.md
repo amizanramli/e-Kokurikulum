@@ -7,7 +7,9 @@ Streamlit web app for co-curricular meeting reports. Replicates the SK Taman Rin
 - **📝 BORANG** — Cascading dropdowns (Komponen → Pasukan → Guru/Murid), advisor teacher chips, per-student attendance with class filter and Semua/Reset/TH bulk actions, full activity fields, image uploads, signature blocks
 - **📑 SENARAI** — All submitted reports with filters, search, expandable details, PDF download, delete
 - **📊 KEHADIRAN** — Statistics dashboard with stat cards, per-team attendance percentages with progress bars, per-student attendance ranking, CSV export
-- **⚙ PENTADBIRAN** — Manage school settings, Komponen, Pasukan, Guru, Murid (including bulk CSV import)
+- **🔒 PENTADBIRAN** — **Password-protected** tab to manage school settings, Komponen, Pasukan, Guru, Murid (with bulk CSV import). Default password: `admin123` — change it on first login.
+
+**Design**: Light blue (sky) primary palette with warm orange contrast accent on action buttons. Stat cards have a light-blue → orange accent stripe; submit buttons use the orange accent for high visibility against the blue UI.
 
 Storage: **SQLite** (single `epelaporan.db` file). No external services needed.
 
@@ -120,12 +122,15 @@ your-project/
 
 ### First run
 1. Open the app — sample data loads automatically (Komponen, Pasukan, Guru, Murid)
-2. Go to **⚙ PENTADBIRAN** tab → fill in your real data:
-   - **Tetapan**: set your school name, app title, optional logo URL
+2. Click the **🔒 PENTADBIRAN** tab → enter default password `admin123` → log in
+3. Go to **Tetapan** → scroll down to **🔑 Tukar Kata Laluan Pentadbir** → set your own password
+4. Still in **Tetapan**: set your school name, app title, optional logo URL
+5. Use the other admin sub-tabs to fill in your real data:
    - **Komponen**: add categories (Unit Beruniform, Persatuan, Sukan, etc.)
    - **Pasukan**: add teams under each category
    - **Guru**: assign advisor teachers to teams
    - **Murid**: add students one-by-one OR upload a CSV with columns `kelas, nama, pasukan`
+6. Click **🚪 Log Keluar** when done — the tab re-locks immediately
 
 ### Submitting a report
 1. **📝 BORANG** tab
@@ -163,10 +168,12 @@ your-project/
 
 ## Tips
 
+- **Default password**: `admin123` — **change it immediately** on first login via **Pentadbiran → Tetapan → Tukar Kata Laluan**. Passwords are stored as SHA-256 hashes in the database.
+- **Forgot password?** Open `epelaporan.db` with any SQLite browser (e.g. [DB Browser for SQLite](https://sqlitebrowser.org/)) → `settings` table → delete the row where `key='admin_password_hash'`, or replace its value with the SHA-256 hash of your new password. The app will restore the default `admin123` hash on next start if missing.
 - **Logo not showing**: Use a direct image URL ending in `.png` or `.jpg`. For Google Drive images, use the `https://drive.google.com/uc?export=view&id=FILE_ID` format
-- **Backup**: Just copy `epelaporan.db` — it contains everything
-- **Multi-user**: Streamlit doesn't have built-in auth. For login, add [streamlit-authenticator](https://github.com/mkhorasani/Streamlit-Authenticator) or put nginx basic auth in front
-- **Data reset**: Delete `epelaporan.db` and restart — fresh start with seed data
+- **Backup**: Just copy `epelaporan.db` — it contains everything (including the password hash)
+- **Multi-user**: Streamlit doesn't have built-in auth. The Pentadbiran tab uses a session-level password lock (resets when the browser session ends). For per-user logins across all tabs, add [streamlit-authenticator](https://github.com/mkhorasani/Streamlit-Authenticator) or put nginx basic auth in front
+- **Data reset**: Delete `epelaporan.db` and restart — fresh start with seed data and default password
 - **Mobile**: Streamlit is responsive, but the form is most comfortable on a tablet
 - **PDF font for Malay characters**: ReportLab's default Helvetica handles standard Latin characters fine. For custom fonts, register them via `pdfmetrics.registerFont()` in `generate_pdf()`
 
