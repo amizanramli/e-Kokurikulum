@@ -18,6 +18,7 @@ from pathlib import Path
 import json
 import io
 import base64
+import hashlib
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
@@ -40,6 +41,8 @@ DEFAULT_SETTINGS = {
     "school_name": "SEKOLAH KEBANGSAAN TAMAN RINTING 3",
     "app_title": "E-PELAPORAN PERJUMPAAN KOKURIKULUM",
     "school_logo_url": "",
+    # SHA-256 of "admin123" — change this in Pentadbiran > Tetapan after first login
+    "admin_password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
 }
 
 DEFAULT_KOMPONEN = ["Unit Beruniform", "Persatuan/Kelab", "Sukan/Permainan", "Lain-lain"]
@@ -180,6 +183,22 @@ def set_setting(key, value):
     conn.close()
 
 
+# ===== Password helpers =====
+def hash_password(password: str) -> str:
+    """SHA-256 hash of the password."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def verify_admin_password(password: str) -> bool:
+    """Check supplied password against stored hash."""
+    stored = get_setting("admin_password_hash", "")
+    return bool(stored) and hash_password(password) == stored
+
+
+def set_admin_password(new_password: str) -> None:
+    set_setting("admin_password_hash", hash_password(new_password))
+
+
 def get_komponen():
     conn = get_conn()
     rows = [r[0] for r in conn.execute("SELECT nama FROM komponen ORDER BY nama").fetchall()]
@@ -249,10 +268,11 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
     )
 
     styles = getSampleStyleSheet()
-    BLUE = colors.HexColor("#0d6efd")
+    BLUE = colors.HexColor("#38bdf8")        # light blue accent
+    BLUE_DARK = colors.HexColor("#0284c7")   # darker for headings (contrast)
 
     title_style = ParagraphStyle(
-        "T", parent=styles["Title"], textColor=BLUE,
+        "T", parent=styles["Title"], textColor=BLUE_DARK,
         fontSize=14, alignment=TA_CENTER, spaceAfter=4
     )
     subtitle_style = ParagraphStyle(
@@ -260,7 +280,7 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
         fontSize=10, alignment=TA_CENTER, spaceAfter=16
     )
     h3_style = ParagraphStyle(
-        "H3", parent=styles["Heading3"], textColor=BLUE,
+        "H3", parent=styles["Heading3"], textColor=BLUE_DARK,
         fontSize=11, spaceBefore=14, spaceAfter=6,
         borderPadding=0, borderWidth=0
     )
@@ -327,7 +347,7 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
         att_rows.append([str(i), a["nama"], a["kelas"], "Hadir" if a["status"] == "H" else "Tidak Hadir"])
     att_table = Table(att_rows, colWidths=[1.2 * cm, 8 * cm, 3 * cm, 3.8 * cm])
     att_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+        ("BACKGROUND", (0, 0), (-1, 0), BLUE_DARK),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
@@ -377,18 +397,29 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
 def apply_custom_css():
     st.markdown("""
     <style>
-        /* Root vars */
+        /* Root vars — light blue primary with warm contrast accents */
         :root {
-            --blue: #0d6efd;
-            --blue-dark: #0b5ed7;
-            --blue-soft: #e7f0ff;
-            --green: #198754;
-            --red: #dc3545;
-            --yellow: #ffc107;
-            --cyan: #0dcaf0;
-            --ink-soft: #495057;
-            --ink-faint: #6c757d;
-            --line: #dee2e6;
+            --blue: #38bdf8;            /* sky-400 — light blue primary */
+            --blue-dark: #0284c7;       /* sky-600 — for hover / text contrast */
+            --blue-deep: #075985;       /* sky-800 — for headings */
+            --blue-soft: #e0f2fe;       /* sky-100 — backgrounds */
+            --blue-mist: #f0f9ff;       /* sky-50 — very light surfaces */
+            --accent: #f97316;          /* orange-500 — contrast accent */
+            --accent-soft: #fff7ed;     /* orange-50 */
+            --green: #10b981;           /* emerald-500 */
+            --red: #ef4444;             /* red-500 */
+            --yellow: #f59e0b;          /* amber-500 */
+            --cyan: #06b6d4;            /* cyan-500 */
+            --ink: #0f172a;             /* slate-900 */
+            --ink-soft: #334155;        /* slate-700 */
+            --ink-faint: #64748b;       /* slate-500 */
+            --line: #e2e8f0;            /* slate-200 */
+            --bg: #f8fafc;              /* slate-50 */
+        }
+
+        /* Page background */
+        .stApp {
+            background: var(--bg);
         }
 
         /* Container width */
@@ -407,13 +438,14 @@ def apply_custom_css():
             width: 88px; height: 88px;
             margin: 0 auto 8px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #0d6efd, #6610f2);
+            background: linear-gradient(135deg, var(--blue), var(--blue-deep));
             color: #fff;
             display: flex; align-items: center; justify-content: center;
             font-weight: 700; font-size: 22px; letter-spacing: 1px;
+            box-shadow: 0 8px 20px rgba(56, 189, 248, 0.35);
         }
         .app-header h1 {
-            color: var(--blue);
+            color: var(--blue-deep);
             font-size: 22px;
             font-weight: 700;
             letter-spacing: 0.5px;
@@ -429,17 +461,25 @@ def apply_custom_css():
 
         /* Card-style section */
         .section-title {
-            color: var(--blue);
+            color: var(--blue-deep);
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 1px;
             padding-bottom: 8px;
-            border-bottom: 1px solid #e9ecef;
+            border-bottom: 2px solid var(--blue);
             margin: 14px 0 12px;
             text-transform: uppercase;
+            position: relative;
+        }
+        .section-title::before {
+            content: "";
+            position: absolute;
+            left: 0; bottom: -2px;
+            width: 40px; height: 2px;
+            background: var(--accent);
         }
         .sub-section-title {
-            color: var(--blue);
+            color: var(--blue-dark);
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 0.8px;
@@ -464,8 +504,9 @@ def apply_custom_css():
             background: transparent;
         }
         .stTabs [aria-selected="true"] {
-            background: var(--blue) !important;
+            background: linear-gradient(135deg, var(--blue), var(--blue-dark)) !important;
             color: #fff !important;
+            box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
         }
 
         /* Color-coded labels */
@@ -483,20 +524,28 @@ def apply_custom_css():
             letter-spacing: 0.6px;
             text-transform: uppercase;
         }
+        .label-accent {
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+        }
 
         /* Guru advisor sub-card */
         .guru-card {
             background: var(--blue-soft);
-            border: 1px solid #cfe2ff;
-            border-radius: 8px;
+            border: 1px solid var(--blue);
+            border-radius: 10px;
             padding: 14px 16px;
             margin: 6px 0 16px;
+            box-shadow: 0 2px 6px rgba(56, 189, 248, 0.1);
         }
 
-        /* Submit button */
+        /* Submit button (primary) — uses accent (orange) for high contrast against light blue UI */
         div.stButton > button[kind="primary"] {
             width: 100%;
-            background: var(--blue);
+            background: var(--accent);
             color: #fff;
             font-weight: 700;
             letter-spacing: 1px;
@@ -505,19 +554,41 @@ def apply_custom_css():
             border: none;
             border-radius: 8px;
             text-transform: uppercase;
+            transition: all 0.15s ease;
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
         }
         div.stButton > button[kind="primary"]:hover {
-            background: var(--blue-dark);
+            background: #ea580c;
+            box-shadow: 0 6px 16px rgba(249, 115, 22, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* Secondary buttons — light blue tint */
+        div.stButton > button[kind="secondary"] {
+            border: 1px solid var(--blue);
+            color: var(--blue-dark);
+            background: #fff;
+            font-weight: 600;
+        }
+        div.stButton > button[kind="secondary"]:hover {
+            background: var(--blue-soft);
+            border-color: var(--blue-dark);
+            color: var(--blue-deep);
         }
 
         /* Stat cards */
         .stat-card {
             background: #fff;
             border: 1px solid var(--line);
-            border-left: 4px solid var(--blue);
+            border-left: 4px solid var(--accent);
             border-radius: 8px;
             padding: 16px;
             text-align: center;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
         }
         .stat-card .label {
             font-size: 11px;
@@ -530,7 +601,7 @@ def apply_custom_css():
         .stat-card .val {
             font-size: 28px;
             font-weight: 700;
-            color: #212529;
+            color: var(--blue-deep);
             line-height: 1.2;
         }
 
@@ -551,6 +622,7 @@ def init_session_state():
         "last_pasukan": None,
         "kelas_filter": "-- Papar Semua Kelas --",
         "form_reset_counter": 0,
+        "admin_authenticated": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -731,7 +803,7 @@ def page_borang():
             total_count = len(st.session_state.attendance)
             st.markdown(
                 f"<div style='text-align:right;font-weight:700;color:#495057;margin-top:8px'>"
-                f"<span style='color:var(--blue)'>{hadir_count}</span> / {total_count} Hadir</div>",
+                f"<span style='color:var(--blue-deep);font-size:18px'>{hadir_count}</span> / {total_count} Hadir</div>",
                 unsafe_allow_html=True
             )
 
@@ -1076,7 +1148,53 @@ def page_kehadiran():
 # PAGE: PENTADBIRAN
 # =========================================================
 def page_admin():
-    st.markdown('<div class="section-title">PENTADBIRAN</div>', unsafe_allow_html=True)
+    # ===== Password gate =====
+    if not st.session_state.get("admin_authenticated", False):
+        st.markdown('<div class="section-title">🔒 PENTADBIRAN — LOG MASUK</div>', unsafe_allow_html=True)
+
+        col_a, col_b, col_c = st.columns([1, 2, 1])
+        with col_b:
+            st.markdown(
+                '<div style="background:#fff;border:1px solid var(--line);border-radius:10px;'
+                'padding:24px;margin-top:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04)">',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                '<p style="color:var(--ink-soft);font-size:14px;margin-bottom:14px">'
+                'Tab Pentadbiran dilindungi kata laluan. Sila masukkan kata laluan untuk mengakses tetapan '
+                'sekolah, data komponen, pasukan, guru dan murid.</p>',
+                unsafe_allow_html=True
+            )
+
+            with st.form("admin_login", clear_on_submit=False):
+                pw = st.text_input("Kata Laluan", type="password",
+                                   placeholder="Masukkan kata laluan pentadbir")
+                submit = st.form_submit_button("Log Masuk", type="primary", use_container_width=True)
+
+            if submit:
+                if verify_admin_password(pw):
+                    st.session_state.admin_authenticated = True
+                    st.success("✅ Log masuk berjaya.")
+                    st.rerun()
+                else:
+                    st.error("❌ Kata laluan salah.")
+
+            st.markdown(
+                '<p style="color:var(--ink-faint);font-size:12px;margin-top:14px;text-align:center">'
+                'Kata laluan lalai: <code>admin123</code> — sila tukar selepas log masuk pertama.</p>',
+                unsafe_allow_html=True
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    # ===== Authenticated — show admin panel =====
+    head_col1, head_col2 = st.columns([5, 1])
+    with head_col1:
+        st.markdown('<div class="section-title">⚙ PENTADBIRAN</div>', unsafe_allow_html=True)
+    with head_col2:
+        if st.button("🚪 Log Keluar", use_container_width=True):
+            st.session_state.admin_authenticated = False
+            st.rerun()
 
     admin_tabs = st.tabs(["Tetapan", "Komponen", "Pasukan", "Guru", "Murid"])
 
@@ -1094,6 +1212,24 @@ def page_admin():
                 set_setting("school_logo_url", lu)
                 st.success("Tetapan disimpan.")
                 st.rerun()
+
+        st.markdown("---")
+        st.markdown('<div class="sub-section-title">🔑 Tukar Kata Laluan Pentadbir</div>',
+                    unsafe_allow_html=True)
+        with st.form("password_form", clear_on_submit=True):
+            current_pw = st.text_input("Kata Laluan Semasa", type="password")
+            new_pw = st.text_input("Kata Laluan Baharu", type="password")
+            confirm_pw = st.text_input("Sahkan Kata Laluan Baharu", type="password")
+            if st.form_submit_button("Tukar Kata Laluan", type="primary"):
+                if not verify_admin_password(current_pw):
+                    st.error("❌ Kata laluan semasa tidak betul.")
+                elif len(new_pw) < 6:
+                    st.error("❌ Kata laluan mesti sekurang-kurangnya 6 aksara.")
+                elif new_pw != confirm_pw:
+                    st.error("❌ Pengesahan kata laluan tidak sepadan.")
+                else:
+                    set_admin_password(new_pw)
+                    st.success("✅ Kata laluan berjaya ditukar.")
 
     # --- Komponen ---
     with admin_tabs[1]:
@@ -1240,9 +1376,10 @@ def main():
     st.markdown(f'<h2>{school_name}</h2>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Tabs
+    # Tabs (lock icon on Pentadbiran when not authenticated)
+    admin_label = "⚙ PENTADBIRAN" if st.session_state.get("admin_authenticated") else "🔒 PENTADBIRAN"
     tab_borang, tab_senarai, tab_kehadiran, tab_admin = st.tabs([
-        "📝 BORANG", "📑 SENARAI", "📊 KEHADIRAN", "⚙ PENTADBIRAN"
+        "📝 BORANG", "📑 SENARAI", "📊 KEHADIRAN", admin_label
     ])
 
     with tab_borang:
