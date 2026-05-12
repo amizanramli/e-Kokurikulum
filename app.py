@@ -38,7 +38,7 @@ PDF_DIR = Path("pdfs")
 PDF_DIR.mkdir(exist_ok=True)
 
 DEFAULT_SETTINGS = {
-    "school_name": "SEKOLAH KEBANGSAAN TAMAN RINTING 3",
+    "school_name": "NAMA SEKOLAH",
     "app_title": "E-PELAPORAN PERJUMPAAN KOKURIKULUM",
     "school_logo_url": "",
     # SHA-256 of "admin123" — change this in Pentadbiran > Tetapan after first login
