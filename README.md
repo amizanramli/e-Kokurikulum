@@ -4,16 +4,36 @@ Streamlit web app for co-curricular meeting reports. Replicates the SK Taman Rin
 
 ## Features
 
-- **📝 BORANG** — Cascading dropdowns (Komponen → Pasukan → Guru/Murid), advisor teacher chips, per-student attendance with class filter and Semua/Reset/TH bulk actions, full activity fields, image uploads, signature blocks
-- **📑 SENARAI** — All submitted reports with filters, search, expandable details, PDF download, delete
+- **📝 BORANG** — Comprehensive co-curricular meeting report form with:
+  - **Maklumat Asas**: Komponen, Pasukan, Tajuk/Kegiatan, Kali Ke, Tarikh (auto-detects Hari), Mula, Akhir, Tempat
+  - **Kehadiran Guru Penasihat**: full H/TH list per teacher with auto-calculated attendance %
+  - **Kehadiran Murid (Ahli)**: class-filtered list with H/TH per student, bulk Semua/Reset/TH actions, auto-calculated %
+  - **Agenda / Tentatif Aktiviti**: Aktiviti Utama + 3 numbered agenda items
+  - **Pengisian Elemen**: Elemen Sivik (18 nilai), Elemen K-BAT (6 options), Elemen RIMUP (5 categories), Sisipan PIKEBM (Kemahiran Bahasa Melayu)
+  - **Amalan Pendidikan Sivik dalam Kurikulum**: Masa, Nilai, Sub-Nilai (29 contoh aktiviti), Tajuk
+  - **Analisis Aktiviti**: Kekuatan, Kelemahan, Cadangan Menangani, Refleksi
+  - **Pengesahan**: 3 signature blocks — Disediakan oleh / Disemak oleh / Disahkan oleh, each with Jawatan
+  - **Gambar Aktiviti**: 2 image uploads with previews
+- **📑 SENARAI** — All submitted reports with filters, search, expandable sections (Maklumat / Aktiviti / Elemen / Sivik / Analisis / Pengesahan / Gambar), PDF download, delete
 - **📊 KEHADIRAN** — Statistics dashboard with stat cards, per-team attendance percentages with progress bars, per-student attendance ranking, CSV export
 - **🔒 PENTADBIRAN** — **Password-protected** tab to manage school settings, Komponen, Pasukan, Guru, Murid (with bulk CSV import). Default password: `admin123` — change it on first login.
 
 **Design**: Light blue (sky) primary palette with warm orange contrast accent on action buttons. Stat cards have a light-blue → orange accent stripe; submit buttons use the orange accent for high visibility against the blue UI.
 
+**Auto-migration**: If you upgrade from an older version of the app, your existing `epelaporan.db` is automatically extended with the new columns on first run — no data loss.
+
 Storage: **SQLite** (single `epelaporan.db` file). No external services needed.
 
-PDF generation: **ReportLab** — A4 reports with attendance tables, activity details, embedded photos, signature lines.
+PDF generation: **ReportLab** — A4 reports with:
+- Maklumat Asas (Tajuk, Komponen, Pasukan, Kali Ke, Tarikh/Hari, Masa, Tempat)
+- Kehadiran Guru Penasihat (full table + % kehadiran)
+- Agenda / Aktiviti
+- Pengisian Elemen (Sivik, K-BAT, RIMUP, PIKEBM)
+- Amalan Pendidikan Sivik dalam Kurikulum (if filled)
+- Analisis Aktiviti (Kekuatan, Kelemahan, Cadangan, Refleksi)
+- Kehadiran Murid (full table + % kehadiran)
+- Gambar Aktiviti (embedded photos)
+- 3-column signature block (Disediakan / Disemak / Disahkan)
 
 ---
 
