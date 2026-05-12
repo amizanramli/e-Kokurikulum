@@ -38,7 +38,7 @@ PDF_DIR = Path("pdfs")
 PDF_DIR.mkdir(exist_ok=True)
 
 DEFAULT_SETTINGS = {
-    "school_name": "NAMA SEKOLAH",
+    "school_name": "SEKOLAH KEBANGSAAN TAMAN RINTING 3",
     "app_title": "E-PELAPORAN PERJUMPAAN KOKURIKULUM",
     "school_logo_url": "",
     # SHA-256 of "admin123" — change this in Pentadbiran > Tetapan after first login
@@ -69,6 +69,100 @@ DEFAULT_MURID = [
     ("5 Cerdas", "Iman bin Hakim", "Bola Sepak"),
     ("5 Cerdas", "Sarah binti Daniel", "Kelab Bahasa Inggeris"),
 ]
+
+# =========================================================
+# REFERENCE LISTS (from MOE rubric / scanned reference sheets)
+# =========================================================
+
+# Pendidikan Sivik — nilai utama (pembentukan perwatakan)
+SIVIK_NILAI = [
+    "Kasih Sayang",
+    "Tanggungjawab Sivik",
+    "Kegembiraan",
+    "Hormat-menghormati",
+    "Keprihatinan",
+    "Pengurusan Diri",
+    "Kestabilan Emosi",
+    "Jati Diri",
+    "Khidmat Masyarakat",
+    "Kebudayaan",
+    "Kepimpinan",
+    "Kerohanian",
+    "Pengurusan Masa",
+    "Kenegaraan",
+    "Kesejahteraan Alam",
+    "Ekosistem",
+    "Alam Sekitar",
+    "Kepekaan",
+]
+
+# Sub-nilai / contoh aktiviti per nilai
+SIVIK_SUB_NILAI = [
+    "Lagu patriotik",
+    "Lagu persatuan",
+    "Kongsi info kesihatan / penampilan diri",
+    "Senamrobik",
+    "Permainan tradisional",
+    "Buat sorakan kumpulan",
+    "Persembahan sketsa",
+    "Gotong-royong",
+    "Ceramah daripada agensi luar",
+    "Persembahan kebudayaan",
+    "Lakar pelan",
+    "Aktiviti pandu arah",
+    "Mengenal warisan",
+    "Tulis biodata tokoh negara",
+    "Cipta dan lakukan kawad formasi",
+    "Pantun",
+    "Buat poster",
+    "Merentas halangan",
+    "Sambutan Hari Kebangsaan / Malaysia",
+    "LDK (Latihan Dalam Kumpulan)",
+    "Kempen alam sekitar",
+    "Aktiviti 3K",
+    "Penghasilan produk dari bahan terbuang",
+    "Cipta info grafik",
+    "Kempen WWF (haiwan pupus)",
+    "Latihan kawad kaki",
+    "Pertolongan cemas",
+    "Kawad kebakaran",
+    "Lain-lain (nyatakan dalam catatan)",
+]
+
+# Elemen KBAT
+KBAT_OPTIONS = [
+    "Aplikasi pengetahuan, kemahiran dan nilai",
+    "Kebolehan menilai",
+    "Membuat keputusan",
+    "Kebolehan refleksi",
+    "Menyelesaikan masalah",
+    "Hasil inovasi",
+]
+
+# Elemen RIMUP
+RIMUP_OPTIONS = [
+    "Sukan dan Permainan",
+    "Jati Diri dan Patriotisme",
+    "Kebudayaan dan Kesenian",
+    "Akademik",
+    "Khidmat Masyarakat",
+]
+
+# Sisipan PIKEBM — kemahiran bahasa
+PIKEBM_OPTIONS = [
+    "Tiada",
+    "Menyatakan / Menjelaskan",
+    "Menyoal",
+    "Memperkenalkan diri",
+    "Mengarahkan",
+    "Membina ayat",
+    "Melakonkan",
+    "Menyeru",
+    "Menjawab",
+    "Mempertahankan hujah",
+]
+
+HARI_OPTIONS = ["Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu", "Ahad"]
 
 
 def get_conn():
@@ -116,25 +210,40 @@ def init_db():
         komponen TEXT,
         pasukan TEXT,
         guru_hadir TEXT,
+        guru_tak_hadir TEXT,
+        jumlah_guru_hadir INTEGER,
+        jumlah_guru INTEGER,
         kali_ke INTEGER,
         tarikh TEXT,
+        hari TEXT,
         mula TEXT,
         akhir TEXT,
         tempat TEXT,
+        tajuk_kegiatan TEXT,
         jumlah_hadir INTEGER,
         jumlah_murid INTEGER,
         elemen_sivik TEXT,
         elemen_kbat TEXT,
+        elemen_rimup TEXT,
         sisipan_pikebm TEXT,
         aktiviti_utama TEXT,
         aktiviti_1 TEXT,
         aktiviti_2 TEXT,
         aktiviti_3 TEXT,
         refleksi TEXT,
+        kekuatan TEXT,
+        kelemahan TEXT,
+        cadangan TEXT,
+        sivik_masa TEXT,
+        sivik_nilai TEXT,
+        sivik_sub_nilai TEXT,
+        sivik_tajuk TEXT,
         pelapor TEXT,
         jawatan_pelapor TEXT,
         penyemak TEXT,
         jawatan_penyemak TEXT,
+        pengesah TEXT,
+        jawatan_pengesah TEXT,
         gambar_1_path TEXT,
         gambar_2_path TEXT,
         pdf_path TEXT
@@ -150,6 +259,32 @@ def init_db():
         status TEXT,
         FOREIGN KEY(laporan_id) REFERENCES laporan(id)
     )""")
+
+    # ===== Migration: add any missing columns to laporan (for upgrades from older versions) =====
+    existing_cols = {r[1] for r in c.execute("PRAGMA table_info(laporan)").fetchall()}
+    required_cols = {
+        "guru_tak_hadir": "TEXT",
+        "jumlah_guru_hadir": "INTEGER",
+        "jumlah_guru": "INTEGER",
+        "hari": "TEXT",
+        "tajuk_kegiatan": "TEXT",
+        "elemen_rimup": "TEXT",
+        "kekuatan": "TEXT",
+        "kelemahan": "TEXT",
+        "cadangan": "TEXT",
+        "sivik_masa": "TEXT",
+        "sivik_nilai": "TEXT",
+        "sivik_sub_nilai": "TEXT",
+        "sivik_tajuk": "TEXT",
+        "pengesah": "TEXT",
+        "jawatan_pengesah": "TEXT",
+    }
+    for col, col_type in required_cols.items():
+        if col not in existing_cols:
+            try:
+                c.execute(f"ALTER TABLE laporan ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
 
     # Seed defaults if empty
     for k, v in DEFAULT_SETTINGS.items():
@@ -320,31 +455,98 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
         except Exception:
             pass
     story.append(info_table([
-        ["Komponen", data.get("komponen", "")],
-        ["Pasukan", data.get("pasukan", "")],
-        ["Guru Penasihat Hadir", data.get("guru_hadir", "")],
-        ["Kali Ke / Tarikh", f"{data.get('kali_ke', '')}  |  {tarikh_str}"],
+        ["Tajuk / Kegiatan", data.get("tajuk_kegiatan", "") or "-"],
+        ["Komponen", data.get("komponen", "") or "-"],
+        ["Pasukan", data.get("pasukan", "") or "-"],
+        ["Kali Ke", str(data.get("kali_ke", "") or "-")],
+        ["Tarikh / Hari", f"{tarikh_str} ({data.get('hari', '')})" if data.get('hari') else tarikh_str],
         ["Masa", f"{data.get('mula', '')} – {data.get('akhir', '')}"],
-        ["Tempat", data.get("tempat", "")],
-        ["Kehadiran Murid", f"{data.get('jumlah_hadir', 0)} / {data.get('jumlah_murid', 0)}"],
+        ["Tempat", data.get("tempat", "") or "-"],
     ]))
 
-    section("PENGISIAN AKTIVITI")
+    # ===== KEHADIRAN GURU =====
+    guru_attendance = data.get("guru_list_attendance", [])
+    if guru_attendance:
+        section("KEHADIRAN GURU PENASIHAT")
+        jgh = data.get("jumlah_guru_hadir", 0)
+        jg = data.get("jumlah_guru", 0)
+        pct = round(jgh / jg * 100) if jg else 0
+        story.append(Paragraph(
+            f"<b>Bilangan Hadir:</b> {jgh} / {jg} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Peratus Kehadiran:</b> {pct}%",
+            body_style
+        ))
+        story.append(Spacer(1, 6))
+        guru_rows = [["Bil", "Nama Guru", "Catatan"]]
+        for i, (g, status) in enumerate(guru_attendance, 1):
+            mark = "Hadir (✓)" if status == "H" else ("Tidak Hadir (✗)" if status == "TH" else "-")
+            guru_rows.append([str(i), g, mark])
+        gt = Table(guru_rows, colWidths=[1.2 * cm, 11 * cm, 3.8 * cm])
+        gt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), BLUE_DARK),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (0, 0), (0, -1), "CENTER"),
+            ("ALIGN", (2, 0), (2, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(gt)
+
+    # ===== AGENDA / AKTIVITI =====
+    section("AGENDA / TENTATIF AKTIVITI")
     story.append(info_table([
-        ["Elemen Pend. Sivik", data.get("elemen_sivik", "")],
-        ["Elemen KBAT", data.get("elemen_kbat", "")],
-        ["Sisipan PIKEBM", data.get("sisipan_pikebm", "")],
-        ["Aktiviti Utama", Paragraph(data.get("aktiviti_utama", "") or "", body_style)],
-        ["Aktiviti 1", data.get("aktiviti_1", "")],
-        ["Aktiviti 2", data.get("aktiviti_2", "")],
-        ["Aktiviti 3", data.get("aktiviti_3", "")],
-        ["Refleksi", Paragraph(data.get("refleksi", "") or "", body_style)],
+        ["Aktiviti Utama", Paragraph(data.get("aktiviti_utama", "") or "-", body_style)],
+        ["Agenda 1", data.get("aktiviti_1", "") or "-"],
+        ["Agenda 2", data.get("aktiviti_2", "") or "-"],
+        ["Agenda 3", data.get("aktiviti_3", "") or "-"],
     ]))
 
-    section("KEHADIRAN MURID")
-    att_rows = [["Bil", "Nama", "Kelas", "Status"]]
+    # ===== PENGISIAN ELEMEN =====
+    section("PENGISIAN ELEMEN")
+    story.append(info_table([
+        ["Elemen Pend. Sivik", data.get("elemen_sivik", "") or "-"],
+        ["Elemen K-BAT", data.get("elemen_kbat", "") or "-"],
+        ["Elemen RIMUP", data.get("elemen_rimup", "") or "-"],
+        ["Sisipan PIKEBM (10 minit)", data.get("sisipan_pikebm", "") or "-"],
+    ]))
+
+    # ===== AMALAN PENDIDIKAN SIVIK DALAM KURIKULUM =====
+    if any(data.get(k) for k in ["sivik_masa", "sivik_nilai", "sivik_sub_nilai", "sivik_tajuk"]):
+        section("AMALAN PENDIDIKAN SIVIK DALAM KURIKULUM")
+        story.append(info_table([
+            ["Masa", data.get("sivik_masa", "") or "-"],
+            ["Nilai", data.get("sivik_nilai", "") or "-"],
+            ["Sub-Nilai / Contoh Aktiviti", data.get("sivik_sub_nilai", "") or "-"],
+            ["Tajuk", Paragraph((data.get("sivik_tajuk", "") or "-").replace("\n", "<br/>"), body_style)],
+        ]))
+
+    # ===== ANALISIS AKTIVITI =====
+    section("ANALISIS AKTIVITI")
+    story.append(info_table([
+        ["Kekuatan Aktiviti", Paragraph(data.get("kekuatan", "") or "-", body_style)],
+        ["Kelemahan Aktiviti", Paragraph(data.get("kelemahan", "") or "-", body_style)],
+        ["Cadangan Menangani", Paragraph(data.get("cadangan", "") or "-", body_style)],
+        ["Refleksi", Paragraph(data.get("refleksi", "") or "-", body_style)],
+    ]))
+
+    # ===== KEHADIRAN MURID =====
+    story.append(PageBreak())
+    section("KEHADIRAN MURID (AHLI)")
+    jh = data.get("jumlah_hadir", 0)
+    jm = data.get("jumlah_murid", 0)
+    mpct = round(jh / jm * 100) if jm else 0
+    story.append(Paragraph(
+        f"<b>Bilangan Hadir:</b> {jh} / {jm} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Peratus Kehadiran Ahli:</b> {mpct}%",
+        body_style
+    ))
+    story.append(Spacer(1, 6))
+
+    att_rows = [["Bil", "Nama", "Kelas", "Catatan"]]
     for i, a in enumerate(attendance, 1):
-        att_rows.append([str(i), a["nama"], a["kelas"], "Hadir" if a["status"] == "H" else "Tidak Hadir"])
+        mark = "Hadir (✓)" if a["status"] == "H" else ("Tidak Hadir (✗)" if a["status"] == "TH" else "-")
+        att_rows.append([str(i), a["nama"], a["kelas"], mark])
     att_table = Table(att_rows, colWidths=[1.2 * cm, 8 * cm, 3 * cm, 3.8 * cm])
     att_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), BLUE_DARK),
@@ -354,7 +556,7 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
         ("ALIGN", (2, 0), (3, -1), "CENTER"),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dee2e6")),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
     ]))
@@ -372,18 +574,27 @@ def generate_pdf(laporan_id: int, data: dict, attendance: list, gambar_paths: li
             except Exception:
                 pass
 
-    # Signatures
-    story.append(Spacer(1, 30))
+    # 3-column signatures (Disediakan / Disemak / Disahkan)
+    story.append(Spacer(1, 36))
     sig_table = Table([
-        ["_______________________", "_______________________"],
-        [data.get("pelapor", ""), data.get("penyemak", "")],
-        [f"{data.get('jawatan_pelapor', '')} (Pelapor)", f"{data.get('jawatan_penyemak', '')} (Penyemak)"],
-    ], colWidths=[8 * cm, 8 * cm])
+        ["DISEDIAKAN OLEH", "DISEMAK OLEH", "DISAHKAN OLEH"],
+        ["", "", ""],
+        ["________________", "________________", "________________"],
+        [data.get("pelapor", "") or "", data.get("penyemak", "") or "", data.get("pengesah", "") or ""],
+        [
+            f"({data.get('jawatan_pelapor', '') or '-'})",
+            f"({data.get('jawatan_penyemak', '') or '-'})",
+            f"({data.get('jawatan_pengesah', '') or '-'})",
+        ],
+    ], colWidths=[5.5 * cm, 5.5 * cm, 5.5 * cm])
     sig_table.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
-        ("TEXTCOLOR", (0, 2), (-1, 2), colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 0), (-1, 0), BLUE_DARK),
+        ("FONTNAME", (0, 3), (-1, 3), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 4), (-1, 4), colors.grey),
+        ("BOTTOMPADDING", (0, 1), (-1, 1), 30),  # space for signature
     ]))
     story.append(sig_table)
 
@@ -618,6 +829,7 @@ def apply_custom_css():
 def init_session_state():
     defaults = {
         "guru_chips": [],
+        "guru_attendance": {},  # {guru_name: 'H'|'TH'|''}
         "attendance": {},  # {murid_id: 'H'|'TH'|''}
         "last_pasukan": None,
         "kelas_filter": "-- Papar Semua Kelas --",
@@ -631,6 +843,7 @@ def init_session_state():
 
 def reset_form_state():
     st.session_state.guru_chips = []
+    st.session_state.guru_attendance = {}
     st.session_state.attendance = {}
     st.session_state.last_pasukan = None
     st.session_state.kelas_filter = "-- Papar Semua Kelas --"
@@ -661,69 +874,112 @@ def page_borang():
         key=f"pasukan_{st.session_state.form_reset_counter}"
     )
 
-    # If pasukan changed, reset attendance & chips
+    # If pasukan changed, reset attendance & guru attendance
     if pasukan != st.session_state.last_pasukan:
         st.session_state.last_pasukan = pasukan
-        st.session_state.guru_chips = []
         if pasukan:
             murid_df = get_murid(pasukan)
             st.session_state.attendance = {int(r.id): "" for r in murid_df.itertuples()}
+            guru_list = get_guru(pasukan)
+            st.session_state.guru_attendance = {g: "" for g in guru_list}
         else:
             st.session_state.attendance = {}
+            st.session_state.guru_attendance = {}
 
-    # GURU PENASIHAT sub-card
-    st.markdown('<div class="guru-card">', unsafe_allow_html=True)
-    st.markdown('<div class="sub-section-title">KEHADIRAN GURU PENASIHAT</div>', unsafe_allow_html=True)
+    # Tajuk kegiatan
+    tajuk_kegiatan = st.text_input(
+        "TAJUK / KEGIATAN",
+        placeholder="Contoh: Penyampaian aktiviti 1M1S",
+        key=f"tk_{st.session_state.form_reset_counter}"
+    )
 
-    guru_list = get_guru(pasukan) if pasukan else []
-    available_guru = [g for g in guru_list if g not in st.session_state.guru_chips]
-
-    col_g1, col_g2 = st.columns([4, 1])
-    with col_g1:
-        guru_pick = st.selectbox(
-            "Pilih Guru",
-            [""] + available_guru,
-            format_func=lambda x: "Pilih Pasukan Dahulu..." if not pasukan else ("-- Pilih Guru --" if x == "" else x),
-            disabled=not pasukan,
-            label_visibility="collapsed",
-            key=f"guru_pick_{st.session_state.form_reset_counter}"
-        )
-    with col_g2:
-        if st.button("+ Tambah", disabled=not guru_pick, use_container_width=True):
-            if guru_pick and guru_pick not in st.session_state.guru_chips:
-                st.session_state.guru_chips.append(guru_pick)
-                st.rerun()
-
-    if st.session_state.guru_chips:
-        chip_cols = st.columns(min(len(st.session_state.guru_chips), 4))
-        for i, g in enumerate(st.session_state.guru_chips):
-            with chip_cols[i % 4]:
-                if st.button(f"✕ {g}", key=f"chip_{i}", help="Klik untuk buang"):
-                    st.session_state.guru_chips.remove(g)
-                    st.rerun()
-    else:
-        st.caption("_Tiada guru dipilih._")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Kali Ke / Tarikh / Mula / Akhir / Tempat
-    col1, col2 = st.columns(2)
+    # Kali Ke / Tarikh / Hari
+    col1, col2, col3 = st.columns(3)
     with col1:
-        kali_ke = st.selectbox("KALI KE", list(range(1, 31)), key=f"kali_ke_{st.session_state.form_reset_counter}")
+        kali_ke = st.selectbox("KALI KE", list(range(1, 31)),
+                              key=f"kali_ke_{st.session_state.form_reset_counter}")
     with col2:
         tarikh = st.date_input("TARIKH", value=date.today(), format="DD/MM/YYYY",
                                key=f"tarikh_{st.session_state.form_reset_counter}")
-
-    col3, col4 = st.columns(2)
     with col3:
-        mula = st.text_input("MULA", value="2:30 PETANG", key=f"mula_{st.session_state.form_reset_counter}")
-    with col4:
-        akhir = st.text_input("AKHIR", value="4:30 PETANG", key=f"akhir_{st.session_state.form_reset_counter}")
+        # Auto-detect hari from tarikh
+        hari_default = HARI_OPTIONS[tarikh.weekday()] if tarikh else "Isnin"
+        hari = st.selectbox("HARI", HARI_OPTIONS,
+                           index=HARI_OPTIONS.index(hari_default) if hari_default in HARI_OPTIONS else 0,
+                           key=f"hari_{st.session_state.form_reset_counter}")
 
-    tempat = st.text_input("TEMPAT", placeholder="Contoh: Dewan sekolah",
-                           key=f"tempat_{st.session_state.form_reset_counter}")
+    # Masa
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        mula = st.text_input("MULA", value="2:30 PETANG",
+                            key=f"mula_{st.session_state.form_reset_counter}")
+    with col_m2:
+        akhir = st.text_input("AKHIR", value="4:30 PETANG",
+                             key=f"akhir_{st.session_state.form_reset_counter}")
+
+    tempat = st.text_input("TEMPAT", placeholder="Contoh: Padang sekolah, Dewan",
+                          key=f"tempat_{st.session_state.form_reset_counter}")
+
+    # ========== KEHADIRAN GURU PENASIHAT ==========
+    st.markdown('<div class="section-title">KEHADIRAN GURU PENASIHAT</div>', unsafe_allow_html=True)
+
+    if not pasukan:
+        st.info("Sila pilih Pasukan untuk papar senarai guru.")
+    else:
+        guru_list = get_guru(pasukan)
+        if not guru_list:
+            st.warning("Tiada guru berdaftar untuk pasukan ini. Tambah dari tab **Pentadbiran**.")
+        else:
+            # Toolbar
+            gtcol1, gtcol2, gtcol3 = st.columns([3, 1, 1])
+            with gtcol2:
+                if st.button("✓ Semua Hadir", use_container_width=True, key="guru_all_h"):
+                    for g in guru_list:
+                        st.session_state.guru_attendance[g] = "H"
+                    st.rerun()
+            with gtcol3:
+                if st.button("⊗ Reset", use_container_width=True, key="guru_reset"):
+                    for g in guru_list:
+                        st.session_state.guru_attendance[g] = ""
+                    st.rerun()
+
+            st.markdown('<div class="guru-card">', unsafe_allow_html=True)
+            for i, g in enumerate(guru_list, 1):
+                current = st.session_state.guru_attendance.get(g, "")
+                rcol1, rcol2, rcol3 = st.columns([5, 1, 1])
+                with rcol1:
+                    st.markdown(
+                        f"<div style='padding:6px 0'>"
+                        f"<span style='color:#64748b;font-size:13px;font-weight:600;margin-right:8px'>{i}.</span>"
+                        f"<span style='font-weight:500'>{g}</span></div>",
+                        unsafe_allow_html=True
+                    )
+                with rcol2:
+                    h_label = "✓ Hadir" if current == "H" else "Hadir"
+                    if st.button(h_label, key=f"gh_{i}", use_container_width=True,
+                                type="primary" if current == "H" else "secondary"):
+                        st.session_state.guru_attendance[g] = "" if current == "H" else "H"
+                        st.rerun()
+                with rcol3:
+                    th_label = "✓ TH" if current == "TH" else "TH"
+                    if st.button(th_label, key=f"gth_{i}", use_container_width=True,
+                                type="primary" if current == "TH" else "secondary"):
+                        st.session_state.guru_attendance[g] = "" if current == "TH" else "TH"
+                        st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            guru_hadir_count = sum(1 for v in st.session_state.guru_attendance.values() if v == "H")
+            guru_total = len(guru_list)
+            guru_pct = round(guru_hadir_count / guru_total * 100) if guru_total else 0
+            st.markdown(
+                f"<div style='text-align:right;font-weight:700;color:#334155;margin-top:8px'>"
+                f"<span style='color:var(--blue-deep);font-size:18px'>{guru_hadir_count}</span> / {guru_total} Hadir "
+                f"<span style='color:var(--accent);margin-left:10px'>({guru_pct}%)</span></div>",
+                unsafe_allow_html=True
+            )
 
     # ========== KEHADIRAN MURID ==========
-    st.markdown('<div class="section-title">KEHADIRAN MURID</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">KEHADIRAN MURID (AHLI)</div>', unsafe_allow_html=True)
 
     if not pasukan:
         st.info("Sila pilih Pasukan untuk papar nama murid.")
@@ -733,7 +989,7 @@ def page_borang():
             st.warning("Tiada murid berdaftar untuk pasukan ini. Tambah dari tab **Pentadbiran**.")
         else:
             # Toolbar
-            tcol1, tcol2, tcol3, tcol4, tcol5 = st.columns([2, 1, 1, 1, 1])
+            tcol1, tcol2, tcol3, tcol4 = st.columns([3, 1, 1, 1])
             kelas_options = ["-- Papar Semua Kelas --"] + sorted(murid_df["kelas"].unique().tolist())
             with tcol1:
                 kelas_filter = st.selectbox("Filter Kelas", kelas_options,
@@ -763,8 +1019,6 @@ def page_borang():
                             if kelas_filter == "-- Papar Semua Kelas --" or m_row.iloc[0]["kelas"] == kelas_filter:
                                 st.session_state.attendance[mid] = "TH"
                     st.rerun()
-            with tcol5:
-                pass  # PDF button placeholder — full PDF is generated on submit
 
             # Filtered display
             display_df = murid_df if kelas_filter == "-- Papar Semua Kelas --" else murid_df[murid_df["kelas"] == kelas_filter]
@@ -772,7 +1026,6 @@ def page_borang():
             if display_df.empty:
                 st.caption("_Tiada murid untuk kelas ini._")
             else:
-                # Render attendance rows
                 for idx, row in display_df.reset_index(drop=True).iterrows():
                     mid = int(row["id"])
                     current = st.session_state.attendance.get(mid, "")
@@ -780,9 +1033,9 @@ def page_borang():
                     with rcol1:
                         st.markdown(
                             f"<div style='padding:6px 0'>"
-                            f"<span style='color:#6c757d;font-size:13px;font-weight:600;margin-right:8px'>{idx+1}.</span>"
+                            f"<span style='color:#64748b;font-size:13px;font-weight:600;margin-right:8px'>{idx+1}.</span>"
                             f"<span>{row['nama']}</span>"
-                            f"<small style='color:#6c757d;margin-left:8px'>{row['kelas']}</small>"
+                            f"<small style='color:#64748b;margin-left:8px'>{row['kelas']}</small>"
                             f"</div>",
                             unsafe_allow_html=True
                         )
@@ -801,60 +1054,129 @@ def page_borang():
 
             hadir_count = sum(1 for v in st.session_state.attendance.values() if v == "H")
             total_count = len(st.session_state.attendance)
+            murid_pct = round(hadir_count / total_count * 100) if total_count else 0
             st.markdown(
-                f"<div style='text-align:right;font-weight:700;color:#495057;margin-top:8px'>"
-                f"<span style='color:var(--blue-deep);font-size:18px'>{hadir_count}</span> / {total_count} Hadir</div>",
+                f"<div style='text-align:right;font-weight:700;color:#334155;margin-top:8px'>"
+                f"<span style='color:var(--blue-deep);font-size:18px'>{hadir_count}</span> / {total_count} Hadir "
+                f"<span style='color:var(--accent);margin-left:10px'>({murid_pct}%)</span></div>",
                 unsafe_allow_html=True
             )
 
-    # ========== PENGISIAN AKTIVITI ==========
-    st.markdown('<div class="section-title">PENGISIAN AKTIVITI</div>', unsafe_allow_html=True)
+    # ========== AKTIVITI / AGENDA ==========
+    st.markdown('<div class="section-title">AGENDA / TENTATIF AKTIVITI</div>', unsafe_allow_html=True)
 
-    sivik_options = ["", "Kasih Sayang", "Kegembiraan", "Hormat-menghormati", "Bertanggungjawab", "Berterima Kasih"]
-    kbat_options = ["", "Mengaplikasi", "Menganalisis", "Menilai", "Mencipta"]
-    pikebm_options = ["Tiada", "Patriotisme", "Penyayang", "Keusahawanan", "Kelestarian Alam Sekitar"]
+    aktiviti_utama = st.text_area("AKTIVITI UTAMA",
+                                  placeholder="Contoh: Penyerahan buku, Pembahagian murid...",
+                                  key=f"au_{st.session_state.form_reset_counter}")
+    aktiviti_1 = st.text_input("AKTIVITI 1 / AGENDA 1",
+                              key=f"a1_{st.session_state.form_reset_counter}")
+    aktiviti_2 = st.text_input("AKTIVITI 2 / AGENDA 2",
+                              key=f"a2_{st.session_state.form_reset_counter}")
+    aktiviti_3 = st.text_input("AKTIVITI 3 / AGENDA 3",
+                              key=f"a3_{st.session_state.form_reset_counter}")
 
-    col_a, col_b = st.columns(2)
-    with col_a:
+    # ========== ELEMEN PENGISIAN ==========
+    st.markdown('<div class="section-title">PENGISIAN ELEMEN</div>', unsafe_allow_html=True)
+
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
         st.markdown('<div class="label-green">ELEMEN PEND. SIVIK</div>', unsafe_allow_html=True)
-        elemen_sivik = st.selectbox("", sivik_options,
+        elemen_sivik = st.selectbox("Elemen Sivik", [""] + SIVIK_NILAI,
             format_func=lambda x: "-- Pilih --" if x == "" else x,
             label_visibility="collapsed",
             key=f"sivik_{st.session_state.form_reset_counter}")
-    with col_b:
-        st.markdown('<div class="label-red">ELEMEN KBAT</div>', unsafe_allow_html=True)
-        elemen_kbat = st.selectbox("", kbat_options,
+    with col_e2:
+        st.markdown('<div class="label-red">ELEMEN K-BAT</div>', unsafe_allow_html=True)
+        elemen_kbat = st.selectbox("Elemen KBAT", [""] + KBAT_OPTIONS,
             format_func=lambda x: "-- Pilih --" if x == "" else x,
             label_visibility="collapsed",
             key=f"kbat_{st.session_state.form_reset_counter}")
 
-    sisipan = st.selectbox("SISIPAN PIKEBM", pikebm_options,
-                           key=f"pikebm_{st.session_state.form_reset_counter}")
-    aktiviti_utama = st.text_area("AKTIVITI UTAMA", placeholder="Aktiviti utama perjumpaan...",
-                                  key=f"au_{st.session_state.form_reset_counter}")
-    aktiviti_1 = st.text_input("AKTIVITI 1", key=f"a1_{st.session_state.form_reset_counter}")
-    aktiviti_2 = st.text_input("AKTIVITI 2", key=f"a2_{st.session_state.form_reset_counter}")
-    aktiviti_3 = st.text_input("AKTIVITI 3", key=f"a3_{st.session_state.form_reset_counter}")
-    refleksi = st.text_area("REFLEKSI", placeholder="Refleksi perjumpaan...",
-                            key=f"rf_{st.session_state.form_reset_counter}")
+    col_e3, col_e4 = st.columns(2)
+    with col_e3:
+        st.markdown('<div class="label-accent">ELEMEN RIMUP</div>', unsafe_allow_html=True)
+        elemen_rimup = st.selectbox("Elemen RIMUP", [""] + RIMUP_OPTIONS,
+            format_func=lambda x: "-- Pilih --" if x == "" else x,
+            label_visibility="collapsed",
+            key=f"rimup_{st.session_state.form_reset_counter}")
+    with col_e4:
+        st.markdown('<div style="font-weight:700;font-size:12px;letter-spacing:0.6px;text-transform:uppercase;color:var(--blue-dark)">SISIPAN PIKEBM (10 minit)</div>', unsafe_allow_html=True)
+        sisipan = st.selectbox("Sisipan PIKEBM", PIKEBM_OPTIONS,
+            label_visibility="collapsed",
+            key=f"pikebm_{st.session_state.form_reset_counter}")
 
-    # ========== PENGESAHAN & GAMBAR ==========
-    st.markdown('<div class="section-title">PENGESAHAN & GAMBAR</div>', unsafe_allow_html=True)
+    # ========== AMALAN PENDIDIKAN SIVIK DALAM KURIKULUM ==========
+    with st.expander("📖 AMALAN PENDIDIKAN SIVIK DALAM KURIKULUM (Butiran)", expanded=False):
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            sivik_masa = st.text_input("MASA",
+                placeholder="Contoh: 7.10 - 7.40",
+                key=f"smasa_{st.session_state.form_reset_counter}")
+        with col_s2:
+            sivik_nilai = st.selectbox("NILAI", [""] + SIVIK_NILAI,
+                format_func=lambda x: "-- Pilih --" if x == "" else x,
+                key=f"snilai_{st.session_state.form_reset_counter}")
 
+        sivik_sub_nilai = st.selectbox("SUB-NILAI / CONTOH AKTIVITI", [""] + SIVIK_SUB_NILAI,
+            format_func=lambda x: "-- Pilih --" if x == "" else x,
+            key=f"ssub_{st.session_state.form_reset_counter}")
+
+        sivik_tajuk = st.text_area("TAJUK",
+            placeholder="Contoh:\n1. Penyelesaian aktiviti min\n2. Pembelajaran murid\n3. Penyelarasan aktiviti",
+            height=100,
+            key=f"stajuk_{st.session_state.form_reset_counter}")
+
+    # ========== ANALISIS AKTIVITI ==========
+    st.markdown('<div class="section-title">ANALISIS AKTIVITI</div>', unsafe_allow_html=True)
+
+    kekuatan = st.text_area("KEKUATAN AKTIVITI",
+        placeholder="Contoh: Murid memberikan kerjasama yang baik...",
+        key=f"kk_{st.session_state.form_reset_counter}")
+    kelemahan = st.text_area("KELEMAHAN AKTIVITI",
+        placeholder="Nyatakan kelemahan yang dikenal pasti...",
+        key=f"kl_{st.session_state.form_reset_counter}")
+    cadangan = st.text_area("CADANGAN MENANGANI",
+        placeholder="Cadangan penambahbaikan...",
+        key=f"cd_{st.session_state.form_reset_counter}")
+    refleksi = st.text_area("REFLEKSI",
+        placeholder="Refleksi keseluruhan perjumpaan...",
+        key=f"rf_{st.session_state.form_reset_counter}")
+
+    # ========== PENGESAHAN (3 signatures) ==========
+    st.markdown('<div class="section-title">PENGESAHAN</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="sub-section-title">DISEDIAKAN OLEH</div>', unsafe_allow_html=True)
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        pelapor = st.text_input("PELAPOR", key=f"pl_{st.session_state.form_reset_counter}")
+        pelapor = st.text_input("Nama Pelapor",
+            key=f"pl_{st.session_state.form_reset_counter}")
     with col_p2:
-        jawatan_pelapor = st.text_input("JAWATAN PELAPOR", placeholder="Contoh: Guru Penasihat",
-                                        key=f"jp_{st.session_state.form_reset_counter}")
+        jawatan_pelapor = st.text_input("Jawatan",
+            placeholder="Contoh: Guru Penasihat",
+            key=f"jp_{st.session_state.form_reset_counter}")
 
+    st.markdown('<div class="sub-section-title">DISEMAK OLEH</div>', unsafe_allow_html=True)
     col_p3, col_p4 = st.columns(2)
     with col_p3:
-        penyemak = st.text_input("PENYEMAK", key=f"ps_{st.session_state.form_reset_counter}")
+        penyemak = st.text_input("Nama Penyemak",
+            key=f"ps_{st.session_state.form_reset_counter}")
     with col_p4:
-        jawatan_penyemak = st.text_input("JAWATAN PENYEMAK", placeholder="Contoh: Guru Besar",
-                                         key=f"jpn_{st.session_state.form_reset_counter}")
+        jawatan_penyemak = st.text_input("Jawatan ",
+            placeholder="Contoh: Ketua Panitia",
+            key=f"jpn_{st.session_state.form_reset_counter}")
 
+    st.markdown('<div class="sub-section-title">DISAHKAN OLEH</div>', unsafe_allow_html=True)
+    col_p5, col_p6 = st.columns(2)
+    with col_p5:
+        pengesah = st.text_input("Nama Pengesah",
+            key=f"pe_{st.session_state.form_reset_counter}")
+    with col_p6:
+        jawatan_pengesah = st.text_input("Jawatan  ",
+            placeholder="Contoh: Guru Besar",
+            key=f"jpe_{st.session_state.form_reset_counter}")
+
+    # ========== GAMBAR ==========
+    st.markdown('<div class="section-title">GAMBAR AKTIVITI</div>', unsafe_allow_html=True)
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         gambar_1 = st.file_uploader("Gambar 1", type=["png", "jpg", "jpeg"],
@@ -890,7 +1212,7 @@ def page_borang():
             with open(gambar_2_path, "wb") as f:
                 f.write(gambar_2.getbuffer())
 
-        # Build attendance list
+        # Build attendance lists
         murid_df = get_murid(pasukan)
         attendance_list = []
         for _, r in murid_df.iterrows():
@@ -901,29 +1223,45 @@ def page_borang():
         jumlah_hadir = sum(1 for a in attendance_list if a["status"] == "H")
         jumlah_murid = len(attendance_list)
 
+        # Guru attendance
+        guru_list = get_guru(pasukan)
+        guru_hadir = [g for g in guru_list if st.session_state.guru_attendance.get(g) == "H"]
+        guru_tak_hadir = [g for g in guru_list if st.session_state.guru_attendance.get(g) == "TH"]
+        jumlah_guru = len(guru_list)
+        jumlah_guru_hadir = len(guru_hadir)
+
         # Insert report
         conn = get_conn()
         cur = conn.cursor()
         cur.execute("""INSERT INTO laporan (
-            timestamp, komponen, pasukan, guru_hadir, kali_ke, tarikh, mula, akhir, tempat,
+            timestamp, komponen, pasukan,
+            guru_hadir, guru_tak_hadir, jumlah_guru_hadir, jumlah_guru,
+            kali_ke, tarikh, hari, mula, akhir, tempat, tajuk_kegiatan,
             jumlah_hadir, jumlah_murid,
-            elemen_sivik, elemen_kbat, sisipan_pikebm,
+            elemen_sivik, elemen_kbat, elemen_rimup, sisipan_pikebm,
             aktiviti_utama, aktiviti_1, aktiviti_2, aktiviti_3, refleksi,
+            kekuatan, kelemahan, cadangan,
+            sivik_masa, sivik_nilai, sivik_sub_nilai, sivik_tajuk,
             pelapor, jawatan_pelapor, penyemak, jawatan_penyemak,
+            pengesah, jawatan_pengesah,
             gambar_1_path, gambar_2_path, pdf_path
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
             datetime.now().isoformat(), komponen, pasukan,
-            ", ".join(st.session_state.guru_chips),
-            kali_ke, tarikh.isoformat(), mula, akhir, tempat,
+            ", ".join(guru_hadir), ", ".join(guru_tak_hadir),
+            jumlah_guru_hadir, jumlah_guru,
+            kali_ke, tarikh.isoformat(), hari, mula, akhir, tempat, tajuk_kegiatan,
             jumlah_hadir, jumlah_murid,
-            elemen_sivik, elemen_kbat, sisipan,
+            elemen_sivik, elemen_kbat, elemen_rimup, sisipan,
             aktiviti_utama, aktiviti_1, aktiviti_2, aktiviti_3, refleksi,
+            kekuatan, kelemahan, cadangan,
+            sivik_masa, sivik_nilai, sivik_sub_nilai, sivik_tajuk,
             pelapor, jawatan_pelapor, penyemak, jawatan_penyemak,
+            pengesah, jawatan_pengesah,
             gambar_1_path, gambar_2_path, ""
         ))
         laporan_id = cur.lastrowid
 
-        # Insert attendance rows
+        # Insert murid attendance rows
         for a in attendance_list:
             cur.execute("""INSERT INTO kehadiran (laporan_id, tarikh, pasukan, kelas, nama_murid, status)
                 VALUES (?, ?, ?, ?, ?, ?)""",
@@ -933,17 +1271,25 @@ def page_borang():
         # Generate PDF
         pdf_data = {
             "komponen": komponen, "pasukan": pasukan,
-            "guru_hadir": ", ".join(st.session_state.guru_chips),
-            "kali_ke": kali_ke, "tarikh": tarikh.isoformat(),
+            "guru_hadir": ", ".join(guru_hadir),
+            "guru_tak_hadir": ", ".join(guru_tak_hadir),
+            "jumlah_guru_hadir": jumlah_guru_hadir, "jumlah_guru": jumlah_guru,
+            "kali_ke": kali_ke, "tarikh": tarikh.isoformat(), "hari": hari,
             "mula": mula, "akhir": akhir, "tempat": tempat,
+            "tajuk_kegiatan": tajuk_kegiatan,
             "jumlah_hadir": jumlah_hadir, "jumlah_murid": jumlah_murid,
             "elemen_sivik": elemen_sivik, "elemen_kbat": elemen_kbat,
-            "sisipan_pikebm": sisipan,
+            "elemen_rimup": elemen_rimup, "sisipan_pikebm": sisipan,
             "aktiviti_utama": aktiviti_utama, "aktiviti_1": aktiviti_1,
             "aktiviti_2": aktiviti_2, "aktiviti_3": aktiviti_3,
             "refleksi": refleksi,
+            "kekuatan": kekuatan, "kelemahan": kelemahan, "cadangan": cadangan,
+            "sivik_masa": sivik_masa, "sivik_nilai": sivik_nilai,
+            "sivik_sub_nilai": sivik_sub_nilai, "sivik_tajuk": sivik_tajuk,
             "pelapor": pelapor, "jawatan_pelapor": jawatan_pelapor,
             "penyemak": penyemak, "jawatan_penyemak": jawatan_penyemak,
+            "pengesah": pengesah, "jawatan_pengesah": jawatan_pengesah,
+            "guru_list_attendance": [(g, st.session_state.guru_attendance.get(g, "")) for g in guru_list],
         }
         pdf_path = generate_pdf(laporan_id, pdf_data, attendance_list,
                                 [gambar_1_path, gambar_2_path])
@@ -1004,34 +1350,98 @@ def page_senarai():
         except Exception:
             tarikh_disp = r["tarikh"] or "-"
 
-        with st.expander(f"📋 **{r['pasukan']}** · {tarikh_disp} · Kali ke-{r['kali_ke']} · {r['jumlah_hadir']}/{r['jumlah_murid']} hadir"):
+        tajuk_disp = r.get("tajuk_kegiatan") or ""
+        header_extra = f" · {tajuk_disp}" if tajuk_disp else ""
+
+        with st.expander(f"📋 **{r['pasukan']}** · {tarikh_disp} · Kali ke-{r['kali_ke']} · {r['jumlah_hadir']}/{r['jumlah_murid']} hadir{header_extra}"):
+
+            # === Maklumat Asas ===
+            st.markdown('**📌 MAKLUMAT ASAS**')
             c1, c2 = st.columns(2)
             with c1:
+                st.markdown(f"**Tajuk/Kegiatan:** {r.get('tajuk_kegiatan') or '-'}")
                 st.markdown(f"**Komponen:** {r['komponen']}")
-                st.markdown(f"**Guru Hadir:** {r['guru_hadir'] or '-'}")
+                st.markdown(f"**Hari:** {r.get('hari') or '-'}")
                 st.markdown(f"**Masa:** {r['mula']} – {r['akhir']}")
+            with c2:
                 st.markdown(f"**Tempat:** {r['tempat'] or '-'}")
+                jgh = r.get('jumlah_guru_hadir') or 0
+                jg = r.get('jumlah_guru') or 0
+                gp = round(jgh / jg * 100) if jg else 0
+                st.markdown(f"**Kehadiran Guru:** {jgh} / {jg} ({gp}%)")
+                jh, jm = r['jumlah_hadir'], r['jumlah_murid']
+                mp = round(jh / jm * 100) if jm else 0
+                st.markdown(f"**Kehadiran Ahli:** {jh} / {jm} ({mp}%)")
+
+            st.markdown(f"**Guru Hadir:** {r['guru_hadir'] or '-'}")
+            if r.get('guru_tak_hadir'):
+                st.markdown(f"**Guru Tidak Hadir:** {r['guru_tak_hadir']}")
+
+            # === Aktiviti ===
+            st.markdown('---')
+            st.markdown('**📅 AGENDA / AKTIVITI**')
+            st.markdown(f"**Aktiviti Utama:** {r['aktiviti_utama'] or '-'}")
+            st.markdown(f"**Agenda 1:** {r['aktiviti_1'] or '-'}")
+            st.markdown(f"**Agenda 2:** {r['aktiviti_2'] or '-'}")
+            st.markdown(f"**Agenda 3:** {r['aktiviti_3'] or '-'}")
+
+            # === Pengisian Elemen ===
+            st.markdown('---')
+            st.markdown('**🎯 PENGISIAN ELEMEN**')
+            c3, c4 = st.columns(2)
+            with c3:
                 st.markdown(f"**Elemen Sivik:** {r['elemen_sivik'] or '-'}")
                 st.markdown(f"**Elemen KBAT:** {r['elemen_kbat'] or '-'}")
-                st.markdown(f"**PIKEBM:** {r['sisipan_pikebm'] or '-'}")
-            with c2:
-                st.markdown(f"**Aktiviti Utama:**\n{r['aktiviti_utama'] or '-'}")
-                st.markdown(f"**Aktiviti 1:** {r['aktiviti_1'] or '-'}")
-                st.markdown(f"**Aktiviti 2:** {r['aktiviti_2'] or '-'}")
-                st.markdown(f"**Aktiviti 3:** {r['aktiviti_3'] or '-'}")
-                st.markdown(f"**Refleksi:** {r['refleksi'] or '-'}")
-                st.markdown(f"**Pelapor:** {r['pelapor'] or '-'} ({r['jawatan_pelapor'] or '-'})")
-                st.markdown(f"**Penyemak:** {r['penyemak'] or '-'} ({r['jawatan_penyemak'] or '-'})")
+            with c4:
+                st.markdown(f"**Elemen RIMUP:** {r.get('elemen_rimup') or '-'}")
+                st.markdown(f"**Sisipan PIKEBM:** {r['sisipan_pikebm'] or '-'}")
+
+            # === Amalan Pendidikan Sivik ===
+            if any(r.get(k) for k in ['sivik_masa', 'sivik_nilai', 'sivik_sub_nilai', 'sivik_tajuk']):
+                st.markdown('---')
+                st.markdown('**📖 AMALAN PENDIDIKAN SIVIK DALAM KURIKULUM**')
+                st.markdown(f"**Masa:** {r.get('sivik_masa') or '-'}")
+                st.markdown(f"**Nilai:** {r.get('sivik_nilai') or '-'}")
+                st.markdown(f"**Sub-Nilai:** {r.get('sivik_sub_nilai') or '-'}")
+                st.markdown(f"**Tajuk:** {r.get('sivik_tajuk') or '-'}")
+
+            # === Analisis Aktiviti ===
+            st.markdown('---')
+            st.markdown('**🔍 ANALISIS AKTIVITI**')
+            st.markdown(f"**Kekuatan:** {r.get('kekuatan') or '-'}")
+            st.markdown(f"**Kelemahan:** {r.get('kelemahan') or '-'}")
+            st.markdown(f"**Cadangan Menangani:** {r.get('cadangan') or '-'}")
+            st.markdown(f"**Refleksi:** {r['refleksi'] or '-'}")
+
+            # === Pengesahan ===
+            st.markdown('---')
+            st.markdown('**✅ PENGESAHAN**')
+            c5, c6, c7 = st.columns(3)
+            with c5:
+                st.markdown(f"**Disediakan oleh:**")
+                st.markdown(f"{r['pelapor'] or '-'}")
+                st.caption(f"{r['jawatan_pelapor'] or '-'}")
+            with c6:
+                st.markdown(f"**Disemak oleh:**")
+                st.markdown(f"{r['penyemak'] or '-'}")
+                st.caption(f"{r['jawatan_penyemak'] or '-'}")
+            with c7:
+                st.markdown(f"**Disahkan oleh:**")
+                st.markdown(f"{r.get('pengesah') or '-'}")
+                st.caption(f"{r.get('jawatan_pengesah') or '-'}")
 
             # Show images
             imgs = [p for p in [r["gambar_1_path"], r["gambar_2_path"]] if p and Path(p).exists()]
             if imgs:
+                st.markdown('---')
+                st.markdown('**📷 GAMBAR AKTIVITI**')
                 img_cols = st.columns(len(imgs))
                 for i, p in enumerate(imgs):
                     with img_cols[i]:
                         st.image(p, use_container_width=True)
 
             # Actions
+            st.markdown('---')
             ac1, ac2 = st.columns(2)
             with ac1:
                 if r["pdf_path"] and Path(r["pdf_path"]).exists():
