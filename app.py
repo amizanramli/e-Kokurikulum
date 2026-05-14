@@ -41,6 +41,7 @@ DEFAULT_SETTINGS = {
     "school_name": "SEKOLAH KEBANGSAAN TAMAN RINTING 3",
     "app_title": "E-PELAPORAN PERJUMPAAN KOKURIKULUM",
     "school_logo_url": "",
+    "school_logo_path": "",   # path to uploaded logo file
     # SHA-256 of "admin123" — change this in Pentadbiran > Tetapan after first login
     "admin_password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
 }
@@ -260,6 +261,21 @@ def init_db():
         FOREIGN KEY(laporan_id) REFERENCES laporan(id)
     )""")
 
+    # Pengesah (pre-registered signatories)
+    c.execute("""CREATE TABLE IF NOT EXISTS pengesah (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        peranan TEXT,          -- 'pelapor' | 'penyemak' | 'pengesah'
+        nama TEXT,
+        jawatan TEXT,
+        UNIQUE(peranan, nama)
+    )""")
+    if c.execute("SELECT COUNT(*) FROM pengesah").fetchone()[0] == 0:
+        c.executemany("INSERT OR IGNORE INTO pengesah (peranan, nama, jawatan) VALUES (?, ?, ?)", [
+            ("pelapor",  "Guru Penasihat",         "Guru Penasihat"),
+            ("penyemak", "Ketua Panitia Kokurikulum", "Penolong Kanan Kokurikulum"),
+            ("pengesah", "Pengetua / Guru Besar",   "Guru Besar"),
+        ])
+
     # ===== Migration: add any missing columns to laporan (for upgrades from older versions) =====
     existing_cols = {r[1] for r in c.execute("PRAGMA table_info(laporan)").fetchall()}
     required_cols = {
@@ -334,6 +350,59 @@ def set_admin_password(new_password: str) -> None:
     set_setting("admin_password_hash", hash_password(new_password))
 
 
+# ===== Logo helpers =====
+def get_logo_base64() -> str:
+    """Return base64 data URI for the school logo (uploaded file takes priority over URL)."""
+    logo_path = get_setting("school_logo_path", "")
+    if logo_path and Path(logo_path).exists():
+        data = Path(logo_path).read_bytes()
+        ext = Path(logo_path).suffix.lower().lstrip(".")
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "png": "image/png", "gif": "image/gif",
+                "webp": "image/webp"}.get(ext, "image/png")
+        return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+    url = get_setting("school_logo_url", "")
+    return url  # may be empty string
+
+
+# ===== Pengesah (signatories) helpers =====
+def get_pengesah(peranan: str):
+    """Return list of (nama, jawatan) tuples for the given peranan."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT nama, jawatan FROM pengesah WHERE peranan=? ORDER BY id", (peranan,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_all_pengesah():
+    conn = get_conn()
+    df = pd.read_sql_query("SELECT id, peranan, nama, jawatan FROM pengesah ORDER BY peranan, id", conn)
+    conn.close()
+    return df
+
+
+def add_pengesah(peranan, nama, jawatan):
+    conn = get_conn()
+    try:
+        conn.execute("INSERT INTO pengesah (peranan, nama, jawatan) VALUES (?, ?, ?)",
+                     (peranan, nama, jawatan))
+        conn.commit()
+        conn.close()
+        return True, "Ditambah."
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "Nama sudah wujud untuk peranan ini."
+
+
+def delete_pengesah(row_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM pengesah WHERE id=?", (row_id,))
+    conn.commit()
+    conn.close()
+
+
 def get_komponen():
     conn = get_conn()
     rows = [r[0] for r in conn.execute("SELECT nama FROM komponen ORDER BY nama").fetchall()]
@@ -387,6 +456,47 @@ def get_kehadiran_log():
     df = pd.read_sql_query("SELECT * FROM kehadiran", conn)
     conn.close()
     return df
+
+
+# =========================================================
+# TIME PICKER WIDGET
+# =========================================================
+def time_picker(label: str, default_hour: int = 14, default_minute: int = 30,
+                default_period: str = "PETANG", key_prefix: str = "t") -> str:
+    """
+    Scroll-wheel-friendly time picker using selectboxes.
+    Returns a string like "2:30 PETANG".
+    """
+    st.markdown(
+        f'<div style="font-size:12px;font-weight:700;letter-spacing:0.8px;'
+        f'text-transform:uppercase;color:#334155;margin-bottom:6px">{label}</div>',
+        unsafe_allow_html=True
+    )
+    c1, c2, c3 = st.columns([2, 2, 3])
+    with c1:
+        hour = st.selectbox(
+            "Jam", list(range(1, 13)),
+            index=default_hour % 12 - 1 if default_hour % 12 != 0 else 11,
+            label_visibility="collapsed",
+            key=f"{key_prefix}_h"
+        )
+    with c2:
+        minute = st.selectbox(
+            "Minit", [f"{m:02d}" for m in range(0, 60, 5)],
+            index=[f"{m:02d}" for m in range(0, 60, 5)].index(f"{default_minute:02d}")
+            if f"{default_minute:02d}" in [f"{m:02d}" for m in range(0, 60, 5)] else 6,
+            label_visibility="collapsed",
+            key=f"{key_prefix}_m"
+        )
+    with c3:
+        period = st.selectbox(
+            "Waktu", ["PAGI", "PETANG", "MALAM"],
+            index=["PAGI", "PETANG", "MALAM"].index(default_period)
+            if default_period in ["PAGI", "PETANG", "MALAM"] else 1,
+            label_visibility="collapsed",
+            key=f"{key_prefix}_p"
+        )
+    return f"{hour}:{minute} {period}"
 
 
 # =========================================================
@@ -911,11 +1021,11 @@ def page_borang():
     # Masa
     col_m1, col_m2 = st.columns(2)
     with col_m1:
-        mula = st.text_input("MULA", value="2:30 PETANG",
-                            key=f"mula_{st.session_state.form_reset_counter}")
+        mula = time_picker("MULA", default_hour=2, default_minute=30, default_period="PETANG",
+                           key_prefix=f"mula_{st.session_state.form_reset_counter}")
     with col_m2:
-        akhir = st.text_input("AKHIR", value="4:30 PETANG",
-                             key=f"akhir_{st.session_state.form_reset_counter}")
+        akhir = time_picker("AKHIR", default_hour=4, default_minute=30, default_period="PETANG",
+                            key_prefix=f"akhir_{st.session_state.form_reset_counter}")
 
     tempat = st.text_input("TEMPAT", placeholder="Contoh: Padang sekolah, Dewan",
                           key=f"tempat_{st.session_state.form_reset_counter}")
@@ -1109,9 +1219,10 @@ def page_borang():
     with st.expander("📖 AMALAN PENDIDIKAN SIVIK DALAM KURIKULUM (Butiran)", expanded=False):
         col_s1, col_s2 = st.columns(2)
         with col_s1:
-            sivik_masa = st.text_input("MASA",
-                placeholder="Contoh: 7.10 - 7.40",
-                key=f"smasa_{st.session_state.form_reset_counter}")
+            sivik_masa = time_picker(
+                "MASA", default_hour=7, default_minute=10, default_period="PAGI",
+                key_prefix=f"smasa_{st.session_state.form_reset_counter}"
+            )
         with col_s2:
             sivik_nilai = st.selectbox("NILAI", [""] + SIVIK_NILAI,
                 format_func=lambda x: "-- Pilih --" if x == "" else x,
@@ -1142,38 +1253,42 @@ def page_borang():
         placeholder="Refleksi keseluruhan perjumpaan...",
         key=f"rf_{st.session_state.form_reset_counter}")
 
-    # ========== PENGESAHAN (3 signatures) ==========
+    # ========== PENGESAHAN (3 signatures) — populated from Pentadbiran ==========
     st.markdown('<div class="section-title">PENGESAHAN</div>', unsafe_allow_html=True)
+    st.caption("Nama dan jawatan diisi oleh pentadbir melalui tab **🔒 Pentadbiran → Pengesah**.")
 
-    st.markdown('<div class="sub-section-title">DISEDIAKAN OLEH</div>', unsafe_allow_html=True)
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        pelapor = st.text_input("Nama Pelapor",
-            key=f"pl_{st.session_state.form_reset_counter}")
-    with col_p2:
-        jawatan_pelapor = st.text_input("Jawatan",
-            placeholder="Contoh: Guru Penasihat",
-            key=f"jp_{st.session_state.form_reset_counter}")
+    def _sig_dropdowns(peranan_key: str, label: str, sub_label: str):
+        """Render a selectbox for a signature role. Returns (nama, jawatan)."""
+        rows = get_pengesah(peranan_key)
+        st.markdown(f'<div class="sub-section-title">{label}</div>', unsafe_allow_html=True)
+        if not rows:
+            st.warning(f"Tiada nama untuk **{label}** dalam Pentadbiran → Pengesah.")
+            c1, c2 = st.columns(2)
+            with c1:
+                nama = st.text_input(f"Nama ({sub_label})",
+                                     key=f"{peranan_key}_nama_{st.session_state.form_reset_counter}")
+            with c2:
+                jawatan = st.text_input(f"Jawatan ({sub_label})",
+                                        key=f"{peranan_key}_jawatan_{st.session_state.form_reset_counter}")
+            return nama, jawatan
 
-    st.markdown('<div class="sub-section-title">DISEMAK OLEH</div>', unsafe_allow_html=True)
-    col_p3, col_p4 = st.columns(2)
-    with col_p3:
-        penyemak = st.text_input("Nama Penyemak",
-            key=f"ps_{st.session_state.form_reset_counter}")
-    with col_p4:
-        jawatan_penyemak = st.text_input("Jawatan ",
-            placeholder="Contoh: Ketua Panitia",
-            key=f"jpn_{st.session_state.form_reset_counter}")
+        options = ["-- Pilih --"] + [f"{n}  |  {j}" for n, j in rows]
+        sel = st.selectbox(label, options,
+                          label_visibility="collapsed",
+                          key=f"{peranan_key}_sel_{st.session_state.form_reset_counter}")
+        if sel and sel != "-- Pilih --":
+            nama, jawatan = sel.split("  |  ", 1)
+        else:
+            nama, jawatan = "", ""
+        return nama.strip(), jawatan.strip()
 
-    st.markdown('<div class="sub-section-title">DISAHKAN OLEH</div>', unsafe_allow_html=True)
-    col_p5, col_p6 = st.columns(2)
-    with col_p5:
-        pengesah = st.text_input("Nama Pengesah",
-            key=f"pe_{st.session_state.form_reset_counter}")
-    with col_p6:
-        jawatan_pengesah = st.text_input("Jawatan  ",
-            placeholder="Contoh: Guru Besar",
-            key=f"jpe_{st.session_state.form_reset_counter}")
+    col_sig1, col_sig2, col_sig3 = st.columns(3)
+    with col_sig1:
+        pelapor, jawatan_pelapor = _sig_dropdowns("pelapor", "DISEDIAKAN OLEH", "Pelapor")
+    with col_sig2:
+        penyemak, jawatan_penyemak = _sig_dropdowns("penyemak", "DISEMAK OLEH", "Penyemak")
+    with col_sig3:
+        pengesah, jawatan_pengesah = _sig_dropdowns("pengesah", "DISAHKAN OLEH", "Pengesah")
 
     # ========== GAMBAR ==========
     st.markdown('<div class="section-title">GAMBAR AKTIVITI</div>', unsafe_allow_html=True)
@@ -1471,28 +1586,86 @@ def page_senarai():
 def page_kehadiran():
     st.markdown('<div class="section-title">STATISTIK KEHADIRAN</div>', unsafe_allow_html=True)
 
-    reports = get_all_reports()
-    kehadiran_df = get_kehadiran_log()
+    reports_all = get_all_reports()
+    kehadiran_all = get_kehadiran_log()
 
-    if reports.empty:
+    if reports_all.empty:
         st.info("Tiada data kehadiran lagi. Sila hantar laporan dahulu.")
         return
 
+    # ===== Date range filter =====
+    st.markdown('<div class="sub-section-title">🗓 Tapis Mengikut Tarikh</div>', unsafe_allow_html=True)
+
+    # Parse tarikh column as dates (handle NaT gracefully)
+    reports_all["_date"] = pd.to_datetime(reports_all["tarikh"], errors="coerce").dt.date
+    valid_dates = reports_all["_date"].dropna()
+
+    if valid_dates.empty:
+        min_date = date.today().replace(month=1, day=1)
+        max_date = date.today()
+    else:
+        min_date = valid_dates.min()
+        max_date = valid_dates.max()
+
+    fcol1, fcol2, fcol3 = st.columns([2, 2, 1])
+    with fcol1:
+        date_from = st.date_input(
+            "Dari tarikh", value=min_date,
+            min_value=min_date, max_value=max_date,
+            format="DD/MM/YYYY", key="keh_from"
+        )
+    with fcol2:
+        date_to = st.date_input(
+            "Hingga tarikh", value=max_date,
+            min_value=min_date, max_value=max_date,
+            format="DD/MM/YYYY", key="keh_to"
+        )
+    with fcol3:
+        pasukan_opts = ["Semua"] + sorted(reports_all["pasukan"].dropna().unique().tolist())
+        pasukan_filter = st.selectbox("Pasukan", pasukan_opts, key="keh_pasukan")
+
+    # Apply filters
+    reports = reports_all[
+        (reports_all["_date"] >= date_from) &
+        (reports_all["_date"] <= date_to)
+    ].copy()
+    if pasukan_filter != "Semua":
+        reports = reports[reports["pasukan"] == pasukan_filter]
+
+    # Filter kehadiran log to same date range
+    if not kehadiran_all.empty:
+        kehadiran_all["_date"] = pd.to_datetime(kehadiran_all["tarikh"], errors="coerce").dt.date
+        kehadiran_df = kehadiran_all[
+            (kehadiran_all["_date"] >= date_from) &
+            (kehadiran_all["_date"] <= date_to)
+        ].copy()
+        if pasukan_filter != "Semua":
+            kehadiran_df = kehadiran_df[kehadiran_df["pasukan"] == pasukan_filter]
+    else:
+        kehadiran_df = kehadiran_all.copy()
+
+    if reports.empty:
+        st.warning("Tiada laporan dalam julat tarikh yang dipilih.")
+        return
+
+    date_range_label = f"{date_from.strftime('%d/%m/%Y')} — {date_to.strftime('%d/%m/%Y')}"
+    st.caption(f"Memaparkan data bagi **{len(reports)}** laporan · {date_range_label}"
+               + (f" · Pasukan: {pasukan_filter}" if pasukan_filter != "Semua" else ""))
+
+    # ===== Stat cards =====
     total_laporan = len(reports)
     total_hadir = reports["jumlah_hadir"].sum()
     total_murid = reports["jumlah_murid"].sum()
     pct = round(total_hadir / total_murid * 100) if total_murid else 0
     pasukan_aktif = reports["pasukan"].nunique()
 
-    # Stat cards
     cs = st.columns(4)
-    stats = [
+    for col, (lbl, val) in zip(cs, [
         ("Jumlah Laporan", total_laporan),
         ("Pasukan Aktif", pasukan_aktif),
         ("Total Kehadiran", f"{int(total_hadir)} / {int(total_murid)}"),
         ("Peratus Kehadiran", f"{pct}%"),
-    ]
-    for col, (lbl, val) in zip(cs, stats):
+    ]):
         with col:
             st.markdown(
                 f'<div class="stat-card"><div class="label">{lbl}</div><div class="val">{val}</div></div>',
@@ -1501,7 +1674,18 @@ def page_kehadiran():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # By pasukan
+    # ===== Trend chart by date =====
+    st.markdown('<div class="sub-section-title">Trend Kehadiran Mengikut Tarikh</div>', unsafe_allow_html=True)
+    trend = reports.groupby("_date").agg(
+        Hadir=("jumlah_hadir", "sum"),
+        Total=("jumlah_murid", "sum"),
+    ).reset_index()
+    trend["Peratus"] = (trend["Hadir"] / trend["Total"] * 100).round(1).fillna(0)
+    trend["Tarikh"] = trend["_date"].apply(lambda d: d.strftime("%d/%m") if d else "")
+    if not trend.empty:
+        st.bar_chart(trend.set_index("Tarikh")["Peratus"], height=200, color="#38bdf8")
+
+    # ===== By pasukan =====
     st.markdown('<div class="sub-section-title">Kehadiran Mengikut Pasukan</div>', unsafe_allow_html=True)
     by_pasukan = reports.groupby("pasukan").agg(
         Perjumpaan=("id", "count"),
@@ -1522,10 +1706,7 @@ def page_kehadiran():
         }
     )
 
-    # Bar chart
-    st.bar_chart(by_pasukan.set_index("Pasukan")["Peratus"], height=240)
-
-    # Per murid
+    # ===== Per murid =====
     if not kehadiran_df.empty:
         st.markdown('<div class="sub-section-title">Kehadiran Per Murid</div>', unsafe_allow_html=True)
         per_murid = kehadiran_df.groupby(["nama_murid", "kelas", "pasukan"]).agg(
@@ -1547,11 +1728,15 @@ def page_kehadiran():
             }
         )
 
-    # Export
+    # Export filtered data
     st.markdown("<br>", unsafe_allow_html=True)
-    csv = reports.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇ Muat Turun Semua Laporan (CSV)", csv,
-                       file_name="laporan-kokurikulum.csv", mime="text/csv")
+    csv = reports.drop(columns=["_date"], errors="ignore").to_csv(index=False).encode("utf-8")
+    st.download_button(
+        f"⬇ Muat Turun Laporan Ditapis (CSV)",
+        csv,
+        file_name=f"laporan-{date_from}-{date_to}.csv",
+        mime="text/csv"
+    )
 
 
 # =========================================================
@@ -1606,21 +1791,56 @@ def page_admin():
             st.session_state.admin_authenticated = False
             st.rerun()
 
-    admin_tabs = st.tabs(["Tetapan", "Komponen", "Pasukan", "Guru", "Murid"])
+    admin_tabs = st.tabs(["Tetapan", "Pengesah", "Komponen", "Pasukan", "Guru", "Murid"])
 
     # --- Settings ---
     with admin_tabs[0]:
         st.markdown('<div class="sub-section-title">Tetapan Sekolah</div>', unsafe_allow_html=True)
+
+        # Logo preview
+        logo_b64 = get_logo_base64()
+        if logo_b64:
+            lo1, lo2 = st.columns([1, 5])
+            with lo1:
+                st.markdown(
+                    f'<img src="{logo_b64}" style="width:80px;height:80px;object-fit:contain;'
+                    f'border:1px solid #e2e8f0;border-radius:8px;padding:4px">',
+                    unsafe_allow_html=True
+                )
+            with lo2:
+                st.caption("Logo semasa ditunjukkan. Muat naik logo baharu di bawah untuk menggantikan.")
+        else:
+            st.caption("Tiada logo. Muat naik fail imej di bawah.")
+
         with st.form("settings_form"):
             sn = st.text_input("Nama Sekolah", value=get_setting("school_name"))
             at = st.text_input("Tajuk Aplikasi", value=get_setting("app_title"))
-            lu = st.text_input("URL Logo Sekolah (pautan terus ke .png/.jpg)",
-                              value=get_setting("school_logo_url"))
+
+            st.markdown("**Logo Sekolah**")
+            logo_file = st.file_uploader(
+                "Muat naik logo (PNG/JPG, akan disimpan secara setempat)",
+                type=["png", "jpg", "jpeg", "gif", "webp"],
+                key="logo_upload"
+            )
+            lu = st.text_input(
+                "ATAU: URL Logo (pautan terus ke .png/.jpg — diabaikan jika fail dimuat naik)",
+                value=get_setting("school_logo_url")
+            )
+
             if st.form_submit_button("Simpan Tetapan", type="primary"):
                 set_setting("school_name", sn)
                 set_setting("app_title", at)
-                set_setting("school_logo_url", lu)
-                st.success("Tetapan disimpan.")
+
+                if logo_file:
+                    # Save logo file to uploads dir
+                    logo_path = UPLOAD_DIR / f"school_logo{Path(logo_file.name).suffix}"
+                    logo_path.write_bytes(logo_file.getbuffer())
+                    set_setting("school_logo_path", str(logo_path))
+                    set_setting("school_logo_url", "")  # clear URL when file uploaded
+                else:
+                    set_setting("school_logo_url", lu)
+
+                st.success("✅ Tetapan disimpan.")
                 st.rerun()
 
         st.markdown("---")
@@ -1641,8 +1861,57 @@ def page_admin():
                     set_admin_password(new_pw)
                     st.success("✅ Kata laluan berjaya ditukar.")
 
-    # --- Komponen ---
+    # --- Pengesah (signatories) ---
     with admin_tabs[1]:
+        st.markdown('<div class="sub-section-title">Pengesah & Penyemak Laporan</div>', unsafe_allow_html=True)
+        st.caption("Nama-nama ini akan muncul sebagai pilihan dalam borang semasa mengisi pengesahan laporan.")
+
+        df_pen = get_all_pengesah()
+        if not df_pen.empty:
+            # Group by peranan for display
+            for peranan_key, peranan_label in [("pelapor", "✍️ Disediakan Oleh (Pelapor)"),
+                                               ("penyemak", "👁 Disemak Oleh (Penyemak)"),
+                                               ("pengesah", "✅ Disahkan Oleh (Pengesah)")]:
+                sub = df_pen[df_pen["peranan"] == peranan_key][["id", "nama", "jawatan"]]
+                if not sub.empty:
+                    st.markdown(f"**{peranan_label}**")
+                    for _, row in sub.iterrows():
+                        rc1, rc2, rc3 = st.columns([3, 3, 1])
+                        with rc1:
+                            st.markdown(f"<div style='padding:6px 0'>{row['nama']}</div>",
+                                       unsafe_allow_html=True)
+                        with rc2:
+                            st.caption(row["jawatan"])
+                        with rc3:
+                            if st.button("🗑", key=f"del_pen_{row['id']}", help="Padam"):
+                                delete_pengesah(int(row["id"]))
+                                st.rerun()
+        else:
+            st.info("Tiada pengesah didaftarkan lagi.")
+
+        st.markdown("---")
+        st.markdown("**Tambah Pengesah Baharu**")
+        with st.form("pengesah_form", clear_on_submit=True):
+            pc1, pc2 = st.columns(2)
+            with pc1:
+                p_peranan = st.selectbox("Peranan", [
+                    ("pelapor", "Disediakan Oleh (Pelapor)"),
+                    ("penyemak", "Disemak Oleh (Penyemak)"),
+                    ("pengesah", "Disahkan Oleh (Pengesah)"),
+                ], format_func=lambda x: x[1])
+            with pc2:
+                p_jawatan = st.text_input("Jawatan", placeholder="Contoh: Guru Penasihat Pengakap")
+            p_nama = st.text_input("Nama Penuh", placeholder="Contoh: En. Ahmad bin Ali")
+            if st.form_submit_button("Tambah", type="primary") and p_nama and p_jawatan:
+                ok, msg = add_pengesah(p_peranan[0], p_nama, p_jawatan)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+                st.rerun()
+
+    # --- Komponen ---
+    with admin_tabs[2]:
         st.markdown('<div class="sub-section-title">Senarai Komponen</div>', unsafe_allow_html=True)
         conn = get_conn()
         df = pd.read_sql_query("SELECT id, nama FROM komponen ORDER BY nama", conn)
@@ -1663,7 +1932,7 @@ def page_admin():
                 st.rerun()
 
     # --- Pasukan ---
-    with admin_tabs[2]:
+    with admin_tabs[3]:
         st.markdown('<div class="sub-section-title">Senarai Pasukan</div>', unsafe_allow_html=True)
         conn = get_conn()
         df = pd.read_sql_query("SELECT id, komponen, nama FROM pasukan ORDER BY komponen, nama", conn)
@@ -1685,7 +1954,7 @@ def page_admin():
                 st.rerun()
 
     # --- Guru ---
-    with admin_tabs[3]:
+    with admin_tabs[4]:
         st.markdown('<div class="sub-section-title">Senarai Guru Penasihat</div>', unsafe_allow_html=True)
         conn = get_conn()
         df = pd.read_sql_query("SELECT id, pasukan, nama FROM guru ORDER BY pasukan, nama", conn)
@@ -1707,7 +1976,7 @@ def page_admin():
                 st.rerun()
 
     # --- Murid ---
-    with admin_tabs[4]:
+    with admin_tabs[5]:
         st.markdown('<div class="sub-section-title">Senarai Murid</div>', unsafe_allow_html=True)
         conn = get_conn()
         df = pd.read_sql_query("SELECT id, kelas, nama, pasukan FROM murid ORDER BY pasukan, kelas, nama", conn)
@@ -1772,12 +2041,12 @@ def main():
     # Header
     school_name = get_setting("school_name")
     app_title = get_setting("app_title")
-    logo_url = get_setting("school_logo_url")
 
     st.markdown('<div class="app-header">', unsafe_allow_html=True)
-    if logo_url:
+    logo_src = get_logo_base64()
+    if logo_src:
         st.markdown(
-            f'<img src="{logo_url}" style="width:88px;height:88px;object-fit:contain;margin:0 auto;display:block">',
+            f'<img src="{logo_src}" style="width:88px;height:88px;object-fit:contain;margin:0 auto;display:block">',
             unsafe_allow_html=True
         )
     else:
